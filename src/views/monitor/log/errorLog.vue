@@ -1,10 +1,11 @@
 <template>
   <div class="app-container">
-    <eHeader :query="query"/>
+    <Search :query="query"/>
     <!--表格渲染-->
     <el-table v-loading="loading" :data="data" size="small" style="width: 100%;">
       <el-table-column prop="username" label="用户名"/>
       <el-table-column prop="requestIp" label="IP"/>
+      <el-table-column :show-overflow-tooltip="true" prop="address" label="IP来源"/>
       <el-table-column prop="description" label="描述"/>
       <el-table-column :show-overflow-tooltip="true" prop="method" label="方法名称"/>
       <el-table-column :show-overflow-tooltip="true" prop="params" label="参数"/>
@@ -27,6 +28,7 @@
     <!--分页组件-->
     <el-pagination
       :total="total"
+      :current-page="page + 1"
       style="margin-top: 8px;"
       layout="total, prev, pager, next, sizes"
       @size-change="sizeChange"
@@ -38,9 +40,10 @@
 import initData from '@/mixins/initData'
 import { parseTime } from '@/utils/index'
 import { getErrDetail } from '@/api/log'
-import eHeader from './module/header'
+import Search from './search'
 export default {
-  components: { eHeader },
+  name: 'ErrorLog',
+  components: { Search },
   mixins: [initData],
   data() {
     return {
@@ -58,11 +61,9 @@ export default {
       this.url = 'api/logs/error'
       const sort = 'id,desc'
       const query = this.query
-      const username = query.username
-      const logType = query.logType
+      const value = query.value
       this.params = { page: this.page, size: this.size, sort: sort }
-      if (username && username) { this.params['username'] = username }
-      if (logType !== '' && logType !== null) { this.params['logType'] = logType }
+      if (value) { this.params['blurry'] = value }
       return true
     },
     info(id) {

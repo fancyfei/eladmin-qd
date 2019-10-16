@@ -7,6 +7,13 @@ export function add(data) {
     data
   })
 }
+export function downloadUser() {
+  return request({
+    url: 'api/users/download',
+    method: 'get',
+    responseType: 'blob'
+  })
+}
 
 export function del(id) {
   return request({
@@ -23,20 +30,10 @@ export function edit(data) {
   })
 }
 
-export function validPass(password) {
+export function updatePass(user) {
   const data = {
-    password
-  }
-  return request({
-    url: 'api/users/validPass/',
-    method: 'post',
-    data
-  })
-}
-
-export function updatePass(password) {
-  const data = {
-    password
+    oldPass: user.oldPass,
+    newPass: user.newPass
   }
   return request({
     url: 'api/users/updatePass/',

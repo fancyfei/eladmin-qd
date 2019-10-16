@@ -1,7 +1,7 @@
 <template>
   <div class="app-container">
     <el-row :gutter="20">
-      <el-col :xs="24" :sm="24" :md="8" :lg="6" :xl="5">
+      <el-col :xs="24" :sm="24" :md="8" :lg="6" :xl="5" style="margin-bottom: 10px">
         <el-card class="box-card">
           <div slot="header" class="clearfix">
             <span>个人信息</span>
@@ -15,8 +15,7 @@
                 :headers="headers"
                 :action="updateAvatarApi"
                 class="avatar-uploader">
-                <img v-if="user.avatar" :src="user.avatar" title="点击上传头像" class="avatar">
-                <i v-else class="el-icon-plus avatar-uploader-icon"/>
+                <img :src="user.avatar ? baseApi + '/avatar/' + user.avatar : Avatar" title="点击上传头像" class="avatar">
               </el-upload>
             </div>
             <ul class="user-info">
@@ -42,7 +41,33 @@
             <span>操作日志</span>
             <div style="display:inline-block;float: right;cursor: pointer" @click="refresh"><i :class="ico"/></div>
           </div>
-          <log ref="log"/>
+          <div>
+            <el-table v-loading="loading" :data="data" size="small" style="width: 100%;">
+              <el-table-column prop="description" label="行为"/>
+              <el-table-column prop="requestIp" label="IP"/>
+              <el-table-column :show-overflow-tooltip="true" prop="address" label="IP来源"/>
+              <el-table-column prop="time" label="请求耗时" align="center">
+                <template slot-scope="scope">
+                  <el-tag v-if="scope.row.time <= 300">{{ scope.row.time }}ms</el-tag>
+                  <el-tag v-else-if="scope.row.time <= 1000" type="warning">{{ scope.row.time }}ms</el-tag>
+                  <el-tag v-else type="danger">{{ scope.row.time }}ms</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="createTime" label="创建日期" width="180px">
+                <template slot-scope="scope">
+                  <span>{{ parseTime(scope.row.createTime) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <!--分页组件-->
+            <el-pagination
+              :total="total"
+              :current-page="page + 1"
+              style="margin-top: 8px;"
+              layout="total, prev, pager, next, sizes"
+              @size-change="sizeChange"
+              @current-change="pageChange"/>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -56,15 +81,18 @@ import { mapGetters } from 'vuex'
 import { regEmail } from '@/utils/index'
 import updatePass from './center/updatePass'
 import updateEmail from './center/updateEmail'
-import log from './center/log'
 import { getToken } from '@/utils/auth'
 import store from '@/store'
 import { parseTime } from '@/utils/index'
+import initData from '@/mixins/initData'
+import Avatar from '@/assets/avatar/avatar.png'
 export default {
   name: 'Center',
-  components: { updatePass, updateEmail, log },
+  components: { updatePass, updateEmail },
+  mixins: [initData],
   data() {
     return {
+      Avatar: Avatar,
       ico: 'el-icon-refresh',
       headers: {
         'Authorization': 'Bearer ' + getToken()
@@ -74,16 +102,26 @@ export default {
   computed: {
     ...mapGetters([
       'user',
-      'updateAvatarApi'
+      'updateAvatarApi',
+      'baseApi'
     ])
   },
   created() {
+    this.$nextTick(() => {
+      this.init()
+    })
     store.dispatch('GetInfo').then(() => {})
   },
   methods: {
     parseTime,
     formatEmail(mail) {
       return regEmail(mail)
+    },
+    beforeInit() {
+      this.url = 'api/logs/user'
+      const sort = 'id,desc'
+      this.params = { page: this.page, size: this.size, sort: sort }
+      return true
     },
     handleSuccess(response, file, fileList) {
       this.$notify({

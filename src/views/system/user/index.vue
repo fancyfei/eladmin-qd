@@ -1,14 +1,46 @@
 <template>
   <div class="app-container">
+    <!--form 组件-->
+    <eForm ref="form" :is-add="isAdd" :dicts="dicts"/>
     <el-row :gutter="20">
-      <el-col :xs="7" :sm="6" :md="4" :lg="4" :xl="4">
+      <!--部门数据-->
+      <el-col :xs="9" :sm="6" :md="4" :lg="4" :xl="4">
         <div class="head-container">
           <el-input v-model="deptName" clearable placeholder="输入部门名称搜索" prefix-icon="el-icon-search" style="width: 100%;" class="filter-item" @input="getDeptDatas"/>
         </div>
         <el-tree :data="depts" :props="defaultProps" :expand-on-click-node="false" default-expand-all @node-click="handleNodeClick"/>
       </el-col>
-      <el-col :xs="17" :sm="18" :md="20" :lg="20" :xl="20">
-        <eHeader :query="query" :sup_this="sup_this" :dicts="dicts"/>
+      <!--用户数据-->
+      <el-col :xs="15" :sm="18" :md="20" :lg="20" :xl="20">
+        <!--工具栏-->
+        <div class="head-container">
+          <!-- 搜索 -->
+          <el-input v-model="query.blurry" clearable placeholder="输入名称或者邮箱搜索" style="width: 200px;" class="filter-item" @keyup.enter.native="toQuery"/>
+          <el-select v-model="query.enabled" clearable placeholder="状态" class="filter-item" style="width: 90px" @change="toQuery">
+            <el-option v-for="item in enabledTypeOptions" :key="item.key" :label="item.display_name" :value="item.key"/>
+          </el-select>
+          <el-button class="filter-item" size="mini" type="success" icon="el-icon-search" @click="toQuery">搜索</el-button>
+          <!-- 新增 -->
+          <div v-permission="['ADMIN','USER_ALL','USER_CREATE']" style="display: inline-block;margin: 0px 2px;">
+            <el-button
+              class="filter-item"
+              size="mini"
+              type="primary"
+              icon="el-icon-plus"
+              @click="add">新增</el-button>
+          </div>
+          <!-- 导出 -->
+          <div style="display: inline-block;">
+            <el-button
+              v-permission="['ADMIN','USER_ALL','USER_SELECT']"
+              :loading="downloadLoading"
+              size="mini"
+              class="filter-item"
+              type="warning"
+              icon="el-icon-download"
+              @click="download">导出</el-button>
+          </div>
+        </div>
         <!--表格渲染-->
         <el-table v-loading="loading" :data="data" size="small" style="width: 100%;">
           <el-table-column prop="username" label="用户名"/>
@@ -31,9 +63,9 @@
               <span>{{ parseTime(scope.row.createTime) }}</span>
             </template>
           </el-table-column>
-          <el-table-column v-if="checkPermission(['ADMIN','USER_ALL','USER_EDIT','USER_DELETE'])" label="操作" width="125" align="center">
+          <el-table-column v-if="checkPermission(['ADMIN','USER_ALL','USER_EDIT','USER_DELETE'])" label="操作" width="125" align="center" fixed="right">
             <template slot-scope="scope">
-              <edit v-permission="['ADMIN','USER_ALL','USER_EDIT']" :dicts="dicts" :data="scope.row" :sup_this="sup_this"/>
+              <el-button v-permission="['ADMIN','USER_ALL','USER_EDIT']" size="mini" type="primary" icon="el-icon-edit" @click="edit(scope.row)"/>
               <el-popover
                 v-permission="['ADMIN','USER_ALL','USER_DELETE']"
                 :ref="scope.row.id"
@@ -52,6 +84,7 @@
         <!--分页组件-->
         <el-pagination
           :total="total"
+          :current-page="page + 1"
           style="margin-top: 8px;"
           layout="total, prev, pager, next, sizes"
           @size-change="sizeChange"
@@ -65,22 +98,27 @@
 import checkPermission from '@/utils/permission'
 import initData from '@/mixins/initData'
 import initDict from '@/mixins/initDict'
-import { del } from '@/api/user'
+import { del, downloadUser } from '@/api/user'
 import { getDepts } from '@/api/dept'
-import { parseTime } from '@/utils/index'
-import eHeader from './module/header'
-import edit from './module/edit'
+import { parseTime, downloadFile } from '@/utils/index'
+import eForm from './form'
 export default {
-  components: { eHeader, edit },
+  name: 'User',
+  components: { eForm },
   mixins: [initData, initDict],
   data() {
     return {
-      height: document.documentElement.clientHeight - 180 + 'px;',
-      delLoading: false, sup_this: this, deptName: '', depts: [], deptId: null,
+      height: document.documentElement.clientHeight - 180 + 'px;', isAdd: false,
+      delLoading: false, deptName: '', depts: [], deptId: null,
       defaultProps: {
         children: 'children',
         label: 'name'
-      }
+      },
+      downloadLoading: false,
+      enabledTypeOptions: [
+        { key: 'true', display_name: '激活' },
+        { key: 'false', display_name: '锁定' }
+      ]
     }
   },
   created() {
@@ -104,11 +142,10 @@ export default {
       this.url = 'api/users'
       const sort = 'id,desc'
       const query = this.query
-      const type = query.type
-      const value = query.value
+      const blurry = query.blurry
       const enabled = query.enabled
       this.params = { page: this.page, size: this.size, sort: sort, deptId: this.deptId }
-      if (type && value) { this.params[type] = value }
+      if (blurry) { this.params['blurry'] = blurry }
       if (enabled !== '' && enabled !== null) { this.params['enabled'] = enabled }
       return true
     },
@@ -117,6 +154,7 @@ export default {
       del(id).then(res => {
         this.delLoading = false
         this.$refs[id].doClose()
+        this.dleChangePage()
         this.init()
         this.$notify({
           title: '删除成功',
@@ -144,6 +182,51 @@ export default {
         this.deptId = data.id
       }
       this.init()
+    },
+    add() {
+      this.isAdd = true
+      this.$refs.form.getDepts()
+      this.$refs.form.getRoles()
+      this.$refs.form.getRoleLevel()
+      this.$refs.form.dialog = true
+    },
+    // 导出
+    download() {
+      this.downloadLoading = true
+      downloadUser().then(result => {
+        downloadFile(result, '用户列表', 'xlsx')
+        this.downloadLoading = false
+      }).catch(() => {
+        this.downloadLoading = false
+      })
+    },
+    // 数据转换
+    formatJson(filterVal, jsonData) {
+      return jsonData.map(v => filterVal.map(j => {
+        if (j === 'createTime' || j === 'lastPasswordResetTime') {
+          return parseTime(v[j])
+        } else if (j === 'enabled') {
+          return parseTime(v[j]) ? '启用' : '禁用'
+        } else {
+          return v[j]
+        }
+      }))
+    },
+    edit(data) {
+      this.isAdd = false
+      const _this = this.$refs.form
+      _this.getRoles()
+      _this.getDepts()
+      _this.getRoleLevel()
+      _this.roleIds = []
+      _this.form = { id: data.id, username: data.username, phone: data.phone, email: data.email, enabled: data.enabled.toString(), roles: [], dept: { id: data.dept.id }, job: { id: data.job.id }}
+      data.roles.forEach(function(data, index) {
+        _this.roleIds.push(data.id)
+      })
+      _this.deptId = data.dept.id
+      _this.jobId = data.job.id
+      _this.getJobs(_this.deptId)
+      _this.dialog = true
     }
   }
 }
